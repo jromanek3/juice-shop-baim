@@ -74,7 +74,6 @@ export class SearchResultComponent implements OnDestroy, AfterViewInit {
     forkJoin([quantities, products]).subscribe(([quantities, products]) => {
       const dataTable: TableEntry[] = []
       this.tableData = products
-      this.trustProductDescription(products) // vuln-code-snippet neutral-line restfulXssChallenge
       for (const product of products) {
         dataTable.push({
           name: product.name,
