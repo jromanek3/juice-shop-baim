@@ -35,14 +35,16 @@ function handleZipFileUpload ({ file }: Request, res: Response, next: NextFuncti
         fs.write(fd, buffer, 0, buffer.length, null, function (err) {
           if (err != null) { next(err) }
           fs.close(fd, function () {
+            const extractionPath = path.resolve('uploads/complaints/')
             fs.createReadStream(tempFile)
               .pipe(unzipper.Parse())
               .on('entry', function (entry: any) {
-                const fileName = entry.path
-                const absolutePath = path.resolve('uploads/complaints/' + fileName)
-                challengeUtils.solveIf(challenges.fileWriteChallenge, () => { return absolutePath === path.resolve('ftp/legal.md') })
-                if (absolutePath.includes(path.resolve('.'))) {
-                  entry.pipe(fs.createWriteStream('uploads/complaints/' + fileName).on('error', function (err) { next(err) }))
+                const fileName = path.normalize(entry.path).replace(/^(\.\.(\/|\\|$))+/, '')
+                const targetPath = path.join(extractionPath, fileName)
+                challengeUtils.solveIf(challenges.fileWriteChallenge, () => { return targetPath === path.resolve('ftp/legal.md') })
+                if (targetPath.startsWith(extractionPath) && !targetPath.includes('..')) {
+                  challengeUtils.solveIf(challenges.fileWriteChallenge, () => { return targetPath === path.resolve('ftp/legal.md') })
+                  entry.pipe(fs.createWriteStream(targetPath).on('error', function (err) { next(err) }))
                 } else {
                   entry.autodrain()
                 }
