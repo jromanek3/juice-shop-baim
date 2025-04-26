@@ -4,6 +4,7 @@
  */
 
 import { type Request, type Response, type NextFunction } from 'express'
+import { QueryTypes } from 'sequelize'
 
 import * as utils from '../lib/utils'
 import * as models from '../models/index'
@@ -15,17 +16,29 @@ class ErrorWithParent extends Error {
   parent: Error | undefined
 }
 
-// vuln-code-snippet start unionSqlInjectionChallenge dbSchemaChallenge
+function validateSearchCriteria(criteria: string): boolean {
+  const regex = /^[a-zA-Z0-9\s\-_.,'"%()!&?]*$/
+  return regex.test(criteria)
+}
+
 export function searchProducts () {
   return (req: Request, res: Response, next: NextFunction) => {
     let criteria: any = req.query.q === 'undefined' ? '' : req.query.q ?? ''
     criteria = (criteria.length <= 200) ? criteria : criteria.substring(0, 200)
+    
+    if (criteria && !validateSearchCriteria(criteria.toString())) {
+      return res.status(400).json({ error: 'Search criteria contains invalid characters' })
+    }
     models.sequelize.query(
-        `SELECT * FROM Products WHERE ((name LIKE '%:criteria%' OR description LIKE '%:criteria%') AND deletedAt IS NULL) ORDER BY name`,
-        { replacements: { criteria } }
-    ).then(([products]: any) => {
+      'SELECT * FROM Products WHERE ((name LIKE ? OR description LIKE ?) AND deletedAt IS NULL) ORDER BY name',
+      {
+        replacements: [`%${criteria}%`, `%${criteria}%`],
+        type: QueryTypes.SELECT
+      }
+    )
+      .then((products: any) => {
         const dataString = JSON.stringify(products)
-        if (challengeUtils.notSolved(challenges.unionSqlInjectionChallenge)) { // vuln-code-snippet hide-start
+        if (challengeUtils.notSolved(challenges.unionSqlInjectionChallenge)) {
           let solved = true
           UserModel.findAll().then(data => {
             const users = utils.queryResultToJson(data)
@@ -62,7 +75,7 @@ export function searchProducts () {
               }
             }
           })
-        } // vuln-code-snippet hide-end
+        }
         for (let i = 0; i < products.length; i++) {
           products[i].name = req.__(products[i].name)
           products[i].description = req.__(products[i].description)
@@ -73,4 +86,3 @@ export function searchProducts () {
       })
   }
 }
-// vuln-code-snippet end unionSqlInjectionChallenge dbSchemaChallenge

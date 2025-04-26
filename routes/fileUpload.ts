@@ -35,14 +35,16 @@ function handleZipFileUpload ({ file }: Request, res: Response, next: NextFuncti
         fs.write(fd, buffer, 0, buffer.length, null, function (err) {
           if (err != null) { next(err) }
           fs.close(fd, function () {
+            const extractionPath = path.resolve('uploads/complaints/')
             fs.createReadStream(tempFile)
               .pipe(unzipper.Parse())
               .on('entry', function (entry: any) {
-                const fileName = entry.path
-                const absolutePath = path.resolve('uploads/complaints/' + fileName)
-                challengeUtils.solveIf(challenges.fileWriteChallenge, () => { return absolutePath === path.resolve('ftp/legal.md') })
-                if (absolutePath.includes(path.resolve('.'))) {
-                  entry.pipe(fs.createWriteStream('uploads/complaints/' + fileName).on('error', function (err) { next(err) }))
+                const fileName = path.normalize(entry.path).replace(/^(\.\.(\/|\\|$))+/, '')
+                const targetPath = path.join(extractionPath, fileName)
+                challengeUtils.solveIf(challenges.fileWriteChallenge, () => { return targetPath === path.resolve('ftp/legal.md') })
+                if (targetPath.startsWith(extractionPath) && !targetPath.includes('..')) {
+                  challengeUtils.solveIf(challenges.fileWriteChallenge, () => { return targetPath === path.resolve('ftp/legal.md') })
+                  entry.pipe(fs.createWriteStream(targetPath).on('error', function (err) { next(err) }))
                 } else {
                   entry.autodrain()
                 }
@@ -80,7 +82,7 @@ function handleXmlUpload ({ file }: Request, res: Response, next: NextFunction) 
       try {
         const sandbox = { libxml, data }
         vm.createContext(sandbox)
-        const xmlDoc = vm.runInContext('libxml.parseXml(data, { noblanks: true, noent: true, nocdata: true })', sandbox, { timeout: 2000 })
+        const xmlDoc = vm.runInContext('libxml.parseXml(data, { noblanks: true, noent: false, nocdata: true })', sandbox, { timeout: 2000 })
         const xmlString = xmlDoc.toString(false)
         challengeUtils.solveIf(challenges.xxeFileDisclosureChallenge, () => { return (utils.matchesEtcPasswdFile(xmlString) || utils.matchesSystemIniFile(xmlString)) })
         res.status(410)
@@ -113,7 +115,7 @@ function handleYamlUpload ({ file }: Request, res: Response, next: NextFunction)
       try {
         const sandbox = { yaml, data }
         vm.createContext(sandbox)
-        const yamlString = vm.runInContext('JSON.stringify(yaml.load(data))', sandbox, { timeout: 2000 })
+        const yamlString = vm.runInContext('JSON.stringify(yaml.safeLoad(data))', sandbox, { timeout: 2000 })
         res.status(410)
         next(new Error('B2B customer complaints via file upload have been deprecated for security reasons: ' + utils.trunc(yamlString, 400) + ' (' + file.originalname + ')'))
       } catch (err: any) { // TODO: Remove any
