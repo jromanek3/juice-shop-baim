@@ -82,6 +82,11 @@ export function quantityCheckBeforeBasketItemUpdate () {
 }
 
 async function quantityCheck (req: Request, res: Response, next: NextFunction, id: number, quantity: number) {
+  if (!Number.isInteger(quantity) || quantity <= 0) {
+    res.status(400).json({ error: res.__('Please specify a valid quantity that is positive and non-zero.') })
+    return
+  }
+
   const product = await QuantityModel.findOne({ where: { ProductId: id } })
   if (product == null) {
     throw new Error('No such product found!')
