@@ -5,7 +5,7 @@
 
 import { SecurityAnswerService } from '../Services/security-answer.service'
 import { UserService } from '../Services/user.service'
-import { type AbstractControl, UntypedFormControl, Validators, FormsModule, ReactiveFormsModule } from '@angular/forms'
+import { type AbstractControl, UntypedFormControl, Validators, FormsModule, ReactiveFormsModule, ValidatorFn } from '@angular/forms'
 import { Component, NgZone, type OnInit } from '@angular/core'
 import { SecurityQuestionService } from '../Services/security-question.service'
 import { Router, RouterLink } from '@angular/router'
@@ -32,6 +32,16 @@ import { MatIconModule } from '@angular/material/icon'
 
 library.add(faUserPlus, faExclamationCircle)
 
+// Custom validator function that allows only letters, numbers, @, -, and . characters
+function allowedCharactersValidator(): ValidatorFn {
+  return (control: AbstractControl): {[key: string]: any} | null => {
+    if (!control.value) return null; // Skip validation if empty
+    
+    const valid = /^[a-zA-Z0-9@\-.]+$/.test(control.value);
+    return valid ? null : { 'invalidCharacters': true };
+  };
+}
+
 @Component({
   selector: 'app-register',
   templateUrl: './register.component.html',
@@ -39,7 +49,11 @@ library.add(faUserPlus, faExclamationCircle)
   imports: [FlexModule, MatCardModule, TranslateModule, MatFormFieldModule, MatLabel, MatInputModule, FormsModule, ReactiveFormsModule, NgIf, MatError, MatHint, MatSlideToggle, PasswordStrengthComponent, PasswordStrengthInfoComponent, MatSelect, NgFor, MatOption, MatButtonModule, RouterLink, MatIconModule]
 })
 export class RegisterComponent implements OnInit {
-  public emailControl: UntypedFormControl = new UntypedFormControl('', [Validators.required, Validators.email])
+  public emailControl: UntypedFormControl = new UntypedFormControl('', [
+    Validators.required, 
+    Validators.email,
+    allowedCharactersValidator() // Add our custom validator
+  ])
   public passwordControl: UntypedFormControl = new UntypedFormControl('', [Validators.required, Validators.minLength(5), Validators.maxLength(40)])
   public repeatPasswordControl: UntypedFormControl = new UntypedFormControl('', [Validators.required, matchValidator(this.passwordControl)])
   public securityQuestionControl: UntypedFormControl = new UntypedFormControl('', [Validators.required])
@@ -67,6 +81,12 @@ export class RegisterComponent implements OnInit {
   }
 
   save () {
+    // Additional input sanitization before submitting
+    if (this.emailControl.hasError('invalidCharacters')) {
+      this.error = 'Email contains invalid characters. Only letters, numbers, @, -, and . are allowed.';
+      return;
+    }
+
     const user = {
       email: this.emailControl.value,
       password: this.passwordControl.value,
@@ -99,10 +119,10 @@ export class RegisterComponent implements OnInit {
   }
 }
 
-function matchValidator (passwordControl: AbstractControl) {
-  return function matchOtherValidate (repeatPasswordControl: UntypedFormControl) {
+function matchValidator (passwordControl: AbstractControl): ValidatorFn {
+  return (control: AbstractControl): { [key: string]: boolean } | null => {
     const password = passwordControl.value
-    const passwordRepeat = repeatPasswordControl.value
+    const passwordRepeat = control.value
     if (password !== passwordRepeat) {
       return { notSame: true }
     }
